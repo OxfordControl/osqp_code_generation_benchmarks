@@ -129,11 +129,11 @@ def gen_qp_matrices(k, n, gammas, version):
         qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, k)
 
         # Save matrices for CVXGEN
-        io.savemat('datafilen%d.mat' % n,
-                   {'gammas': gammas,
-                    'F': F,
-                    'D': D,
-                    'mu': mu})
+        # io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
+        #            {'gammas': gammas,
+        #             'F': F,
+        #             'D': D,
+        #             'mu': mu})
 
     # Return QP matrices
     return qp_matrices
@@ -284,7 +284,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([50, 100, 150, 200, 300, 400, 500])
+n_vec = np.array([50, 80, 100, 120, 150, 200, 300, 400, 500])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)
@@ -319,16 +319,19 @@ for i in range(len(n_vec)):
 
 
 
-
+# Load cvx timings
+cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
+cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
+plt.semilogy(n_vec[:4], cvxgen_avg, color=colors['g'], label='CVXGEN')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
