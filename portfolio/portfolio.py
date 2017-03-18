@@ -318,7 +318,6 @@ for i in range(len(n_vec)):
     osqp_iter.append(niter)
 
 
-import ipdb; ipdb.set_trace()
 '''
 Get CVXGEN timings
 '''
@@ -351,7 +350,7 @@ ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
 plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
-plt.semilogy(n_vec, fiordos_avg, color=colors['r'], label='FiOrdOs')
+plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
