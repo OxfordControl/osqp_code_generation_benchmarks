@@ -199,7 +199,7 @@ out/
 small/code
 portfolio/code
 portfolio/*.txt
-portfolio/cvxgen/**/*cvxgen*
+portfolio/cvxgen/**/cvxgen
 portfolio/cvxgen/**/*csolve*
 portfolio/cvxgen/**/*cvxsolve*
 mpc_pendulum/code
