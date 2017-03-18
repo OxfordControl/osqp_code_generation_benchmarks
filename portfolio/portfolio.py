@@ -168,7 +168,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.1, alpha=1.5, sigma=0.001, verbose=False)
+                rho=0.15, alpha=1.8, sigma=0.001, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -274,7 +274,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300])
+n_vec = np.array([20, 30, 50, 80, 100, 120, 150, 200, 250, 300])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)
@@ -308,15 +308,14 @@ for i in range(len(n_vec)):
     osqp_iter.append(niter)
 
 
-
 '''
 Get CVXGEN timings
 '''
-# cur_dir = os.getcwd()
-# os.chdir('cvxgen')
-# call(["matlab", "-nodesktop", "-nosplash",
-#       "-r", "run run_all; exit;"])
-# os.chdir(cur_dir)
+cur_dir = os.getcwd()
+os.chdir('cvxgen')
+call(["matlab", "-nodesktop", "-nosplash",
+      "-r", "run run_all; exit;"])
+os.chdir(cur_dir)
 cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
 # Plot timings
@@ -328,7 +327,7 @@ plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
-plt.semilogy(n_vec[:4], cvxgen_avg, color=colors['g'], label='CVXGEN')
+plt.semilogy(n_vec[:6], cvxgen_avg, color=colors['g'], label='CVXGEN')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')

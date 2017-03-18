@@ -2,7 +2,7 @@
 
 
 % Number of assets
-n_vec = [50, 80, 100, 120];
+n_vec = [20, 30, 50, 80, 100, 120];
 n_probs = length(n_vec);
 
 % Get current folder
