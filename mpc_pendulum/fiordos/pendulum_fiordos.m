@@ -7,6 +7,10 @@ clc
 N = 3;
 
 % Generate and load data
+if ~(exist('data', 'dir') == 7)
+   mkdir data 
+end
+
 filename = pendulum_data(N);
 load(filename);
 
