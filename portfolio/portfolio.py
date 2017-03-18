@@ -78,7 +78,7 @@ def gen_qp_matrices(k, n, gammas, version):
     # Problem parameters
     # k = 10
     # n = 200
-    dens_lvl = 0.5
+    dens_lvl = 0.4
 
     # Generate data
     F = spa.random(n, k, density=dens_lvl, format='csc')
@@ -168,7 +168,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.15, alpha=1.8, sigma=0.001, verbose=False)
+                rho=0.05, alpha=1.5, sigma=0.001, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -275,6 +275,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 # Assets
 n_vec = np.array([20, 30, 50, 80, 100, 120, 150, 200, 250, 300])
+# n_vec = np.array([20, 30, 50])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)
@@ -327,7 +328,7 @@ plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
-plt.semilogy(n_vec[:6], cvxgen_avg, color=colors['g'], label='CVXGEN')
+plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
