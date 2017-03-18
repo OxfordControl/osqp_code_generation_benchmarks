@@ -15,7 +15,7 @@ def b(x, n, N):
 dyn_A = sp.csc_matrix([[1., 0.02, 0., 0.], [0., 1., 0., 0.],
                        [0., 0., 1.0049, 0.02], [0., 0., 0.4913, 1.0049]])
 dyn_B = sp.csc_matrix([[0.0002], [0.02], [-0.0005], [-0.0501]])
-[n, m] = dyn_B.shape
+[nx, nu] = dyn_B.shape
 
 # Objective function
 obj_Q = sp.diags([1., 0.3, 0.3, 0.1])
@@ -32,7 +32,7 @@ constr_dl = -5.0
 constr_du = 5.0
 
 # State constraints
-constr_E = sp.eye(n)
+constr_E = sp.eye(nx)
 constr_el = np.array([-0.5, -1.0, -0.2, -0.5])
 constr_eu = np.array([0.5, 1.0, 0.2, 0.5])
 
@@ -42,7 +42,7 @@ constr_fl = constr_el
 constr_fu = constr_eu
 
 # Prediction horizon
-N = 1
+N = 10
 
 '''
 MPC Matrices
@@ -53,7 +53,7 @@ Hu = sp.kron(sp.eye(N), obj_R)
 H = sp.block_diag([Hx, obj_QN, Hu])
 
 # Dynamics
-Mx = sp.kron(sp.eye(N+1), -sp.eye(n)) + sp.kron(sp.eye(N+1, k=-1), dyn_A)
+Mx = sp.kron(sp.eye(N+1), -sp.eye(nx)) + sp.kron(sp.eye(N+1, k=-1), dyn_A)
 Mu = sp.kron(sp.vstack([sp.csc_matrix((1, N)), sp.eye(N)]), dyn_B)
 M = sp.hstack([Mx, Mu])
 
@@ -68,13 +68,14 @@ gu = np.hstack([np.tile(constr_eu, N), constr_fu, np.tile(constr_du, N)])
 # Pass the data to OSQP
 x = np.array([0., 0., 0.15, 0.])  # initial state: [p, p_dot, theta, theta_dot]
 P = H
-q = np.zeros((N+1)*n + N*m)
+q = np.zeros((N+1)*nx + N*nu)
 A = sp.vstack([M, G])
-l = np.hstack([b(x, n, N), gl])
-u = np.hstack([b(x, n, N), gu])
+l = np.hstack([b(x, nx, N), gl])
+u = np.hstack([b(x, nx, N), gu])
 
 m = osqp.OSQP()
-m.setup(P, q, A, l, u, rho=1e-1, sigma=1e-5)
+m.setup(P, q, A, l, u, eps_rel=1e-2, eps_abs=1e-2,
+        rho=1e-1, sigma=1e-3, alpha=1.95, max_iter=3000)
 
 # Generate the code
 m.codegen("code", project_type="Makefile", embedded=1,
@@ -94,7 +95,7 @@ for i in range(sim_steps):
 
     # Solve
     sol = emosqp.solve()
-    u = sol[0][(N+1)*n]
+    u = sol[0][(N+1)*nx]
     status_val = sol[2]
     numofiter = sol[3]
     runtime = 1000*sol[4]
@@ -110,6 +111,6 @@ for i in range(sim_steps):
     x = dyn_A.dot(x) + B.dot(u)
 
     # Update initial state
-    l_new = np.hstack([b(x, n, N), gl])
-    u_new = np.hstack([b(x, n, N), gu])
+    l_new = np.hstack([b(x, nx, N), gl])
+    u_new = np.hstack([b(x, nx, N), gu])
     emosqp.update_bounds(l_new, u_new)

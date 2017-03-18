@@ -201,4 +201,8 @@ portfolio/*.txt
 portfolio/cvxgen/**/cvxgen
 portfolio/cvxgen/**/*csolve*
 portfolio/cvxgen/**/*cvxsolve*
+portfolio/fiordos/**/code
 mpc_pendulum/code
+mpc_pendulum/fiordos/data
+mpc_pendulum/fiordos/fiordos_code
+mpc_pendulum/fiordos/old_files

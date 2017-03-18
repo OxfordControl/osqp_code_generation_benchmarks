@@ -31,7 +31,8 @@ plt.rc('font', family='serif')
 
 colors = { 'b': '#1f77b4',
            'g': '#2ca02c',
-           'o': '#ff7f0e'}
+           'o': '#ff7f0e',
+           'r': '#d62728'}
 
 # Iterations
 # import tqdm
@@ -134,11 +135,19 @@ def gen_qp_matrices(k, n, gammas, version):
         qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, k)
 
         # Save matrices for CVXGEN
-        # io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
-        #            {'gammas': gammas,
-        #             'F': F,
-        #             'D': D,
-        #             'mu': mu})
+        if n <= 120:
+            io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
+                       {'gammas': gammas,
+                        'F': F,
+                        'D': D,
+                        'mu': mu})
+
+        # Save matrices for FiOrdOs
+        io.savemat('fiordos/n%d/datafilen%d.mat' % (n, n),
+                   {'gammas': gammas,
+                    'F': F,
+                    'D': D,
+                    'mu': mu})
 
     # Return QP matrices
     return qp_matrices
@@ -309,6 +318,7 @@ for i in range(len(n_vec)):
     osqp_iter.append(niter)
 
 
+import ipdb; ipdb.set_trace()
 '''
 Get CVXGEN timings
 '''
@@ -319,16 +329,29 @@ call(["matlab", "-nodesktop", "-nosplash",
 os.chdir(cur_dir)
 cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
+
+'''
+Get FiOrdOs timings
+'''
+cur_dir = os.getcwd()
+os.chdir('fiordos')
+call(["matlab", "-nodesktop", "-nosplash",
+      "-r", "run run_all; exit;"])
+os.chdir(cur_dir)
+fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
+
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
 cvxgen_avg = cvxgen_results['avg_vec'].flatten()
+fiordos_avg = fiordos_results['avg_vec'].flatten()
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
 plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
+plt.semilogy(n_vec, fiordos_avg, color=colors['r'], label='FiOrdOs')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
