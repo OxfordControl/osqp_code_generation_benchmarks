@@ -3,7 +3,10 @@ from __future__ import division
 import numpy as np
 import scipy.sparse as spa
 from builtins import range
-import sys
+import os
+
+# Import subprocess to run matlab script
+from subprocess import call
 
 # Import scipy io to write/read mat file
 import scipy.io as io
@@ -275,6 +278,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
     # Return statistics
     return Statistics(time), Statistics(niter)
 
+
 '''
 Solve problems
 '''
@@ -284,7 +288,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([50, 80, 100, 120, 150, 200, 300, 400, 500])
+n_vec = np.array([50, 80, 100, 120, 150, 200, 300])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)
@@ -302,7 +306,6 @@ for i in range(len(n_vec)):
     qp_matrices_sparse = gen_qp_matrices(k_vec[i], n_vec[i],
                                          gammas, 'sparse')
 
-
     # Solve loop with emosqp
     timing, niter = solve_loop(qp_matrices_sparse, 'emosqp')
     osqp_timing.append(timing)
@@ -317,9 +320,14 @@ for i in range(len(n_vec)):
     qpoases_timing.append(timing)
     qpoases_iter.append(niter)
 
-
-
-# Load cvx timings
+'''
+Get CVXGEN timings
+'''
+cur_dir = os.getcwd()
+os.chdir('cvxgen')
+call(["matlab", "-nodesktop", "-nosplash",
+      "-r", "run run_all; exit;"])
+os.chdir(cur_dir)
 cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
 # Plot timings
