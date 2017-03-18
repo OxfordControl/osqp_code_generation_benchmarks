@@ -1,14 +1,15 @@
-function [ time_vec ] = portfolion100cvxgen()
+function [ time_vec ] = portfolion80()
 %PORTFOLION100CVXGEN Run portfolio example with n = 100, m = 10
 % with CVXGEN
 
+
+% Generate code with
 if ~exist(strcat('csolve.', mexext), 'file')
-    % Generate code with
-    cvxgen(526211878912)
+    cvxgen(926748553216)
 end
 
 % Load data
-data = load('datafilen100.mat');
+data = load('datafilen80.mat');
 
 % Setup parameters struct
 params.F = full(data.F);

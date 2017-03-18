@@ -3,7 +3,10 @@ from __future__ import division
 import numpy as np
 import scipy.sparse as spa
 from builtins import range
-import sys
+import os
+
+# Import subprocess to run matlab script
+from subprocess import call
 
 # Import scipy io to write/read mat file
 import scipy.io as io
@@ -15,7 +18,7 @@ import importlib
 import osqp
 
 # Import qpoases
-import qpoases
+import qpoases as qpoases
 
 # Plotting
 import matplotlib.pylab as plt
@@ -31,7 +34,7 @@ colors = { 'b': '#1f77b4',
            'o': '#ff7f0e'}
 
 # Iterations
-import tqdm
+# import tqdm
 
 
 class QPmatrices(object):
@@ -90,8 +93,10 @@ def gen_qp_matrices(k, n, gammas, version):
         #       minimize	x' (F * F' + D) x - (1/gamma) * mu' x
         #       subject to  1' x = 1
         #                   0 <= x <= 1
-        P = np.asarray(2. * (F.dot(F.T) + D).todense())
-        A = np.ones((1, n))
+        P = 2. * (F.dot(F.T) + D)
+        P = P.todense()
+        A = spa.csc_matrix(np.ones((1, n)))
+        A = A.todense()
         l = np.array([1.])
         lx = np.zeros(n)
         u = np.array([1.])
@@ -129,11 +134,11 @@ def gen_qp_matrices(k, n, gammas, version):
         qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, k)
 
         # Save matrices for CVXGEN
-        io.savemat('datafilen%d.mat' % n,
-                   {'gammas': gammas,
-                    'F': F,
-                    'D': D,
-                    'mu': mu})
+        # io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
+        #            {'gammas': gammas,
+        #             'F': F,
+        #             'D': D,
+        #             'mu': mu})
 
     # Return QP matrices
     return qp_matrices
@@ -163,7 +168,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.1, verbose=False)
+                rho=0.1, alpha=1.5, sigma=0.001, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -198,48 +203,38 @@ def solve_loop(qp_matrices, solver='emosqp'):
         n_dim = qp.P.shape[0]
         m_dim = qp.A.shape[0]
 
-        # Initialize cpu time
-        qpoases_cpu_time = np.array([200.])
-
-        # Get first vector q
-        q = qp.q_vecs[:, 0]
-
-        # Number of working set recalculations
-        nWSR = np.array([1000])
-
-        # Initialize qpOASES
+        # Initialize qpoases and set options
         qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
         options = qpoases.PyOptions()
         options.printLevel = qpoases.PyPrintLevel.NONE
         qpoases_m.setOptions(options)
-        qpoases_m.init(qp.P, q, qp.A,
-                       qp.lx, qp.ux, qp.l, qp.u,
-                       nWSR, qpoases_cpu_time)
 
-        # qpOASES already solves the first instance on init
-        time[0] = qpoases_cpu_time[0]
-        niter[0] = nWSR[0]
 
         for i in range(n_prob):
-            q = qp.q_vecs[:, i]
+
+            # Get linera cost as contiguous array
+            q = np.ascontiguousarray(qp.q_vecs[:, i])
 
             # Reset cpu time
-            qpoases_cpu_time = np.array([200.])
+            qpoases_cpu_time = np.array([20.])
 
             # Reset number of of working set recalculations
             nWSR = np.array([1000])
 
-            # Solve new hot started problem
-            res_qpoases = qpoases_m.hotstart(q, qp.lx, qp.ux,
-                                             qp.l, qp.u, nWSR,
-                                             qpoases_cpu_time)
+            if i == 0:
+                res_qpoases = qpoases_m.init(qp.P, q, qp.A, qp.lx, qp.ux,
+                                             qp.l, qp.u,
+                                             nWSR, qpoases_cpu_time)
+            else:
+                # Solve new hot started problem
+                res_qpoases = qpoases_m.hotstart(q, qp.lx, qp.ux,
+                                                 qp.l, qp.u, nWSR,
+                                                 qpoases_cpu_time)
 
-            # DEBUG: Still wrong!
-            # qpOASES solution
+            # # DEBUG Solve with gurobi
+            # qpoases solution
             # sol_qpoases = np.zeros(qp.n)
             # qpoases_m.getPrimalSolution(sol_qpoases)
-            #
-            # # Solve with gurobi
             # import mathprogbasepy as mpbpy
             # Agrb = spa.vstack((spa.csc_matrix(qp.A),
             #                    spa.eye(qp.n))).tocsc()
@@ -248,25 +243,19 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
             #                              Agrb, lgrb, ugrb)
             # res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
-            # # m = osqp.OSQP()
-            # # m.setup(qp.P, q, Agrb, lgrb, ugrb)
-            # # res = m.solve()
-            # print("Norm difference x qpOASES - GUROBI = %.4f" %
+            # print("Norm difference x qpoases - GUROBI = %.4f" %
             #       np.linalg.norm(sol_qpoases - res.x))
-            # print("Norm difference objval qpOASES - GUROBI = %.4f" %
+            # print("Norm difference objval qpoases - GUROBI = %.4f" %
             #       abs(qpoases_m.getObjVal() - res.obj_val))
 
             if res_qpoases != 0:
-                raise ValueError('qpOASES did not solve the problem!')
-
-            # import ipdb; ipdb.set_trace()
+                raise ValueError('qpoases did not solve the problem!')
 
             # Save time
-            if i > 0:
-                time[i] = qpoases_cpu_time[0]
+            time[i] = qpoases_cpu_time[0]
 
-                # Save number of iterations
-                niter[i] = nWSR[0]
+            # Save number of iterations
+            niter[i] = nWSR[0]
 
     else:
         raise ValueError('Solver not understood')
@@ -274,6 +263,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
     # Return statistics
     return Statistics(time), Statistics(niter)
+
 
 '''
 Solve problems
@@ -284,7 +274,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([50, 100, 150, 200, 300, 400, 500])
+n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)
@@ -298,37 +288,47 @@ qpoases_iter = []
 
 
 for i in range(len(n_vec)):
+
+    # Generate QP dense matrices
+    qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
+                                        gammas, 'dense')
+
+    # Solving loop with qpoases
+    timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
+    qpoases_timing.append(timing)
+    qpoases_iter.append(niter)
+
     # Generate QP sparsematrices
     qp_matrices_sparse = gen_qp_matrices(k_vec[i], n_vec[i],
                                          gammas, 'sparse')
-
 
     # Solve loop with emosqp
     timing, niter = solve_loop(qp_matrices_sparse, 'emosqp')
     osqp_timing.append(timing)
     osqp_iter.append(niter)
 
-    # Generate QP dense matrices
-    qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
-                                        gammas, 'dense')
-
-    # Solving loop with qpOASES
-    timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
-    qpoases_timing.append(timing)
-    qpoases_iter.append(niter)
 
 
-
-
+'''
+Get CVXGEN timings
+'''
+# cur_dir = os.getcwd()
+# os.chdir('cvxgen')
+# call(["matlab", "-nodesktop", "-nosplash",
+#       "-r", "run run_all; exit;"])
+# os.chdir(cur_dir)
+cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
+cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
+plt.semilogy(n_vec[:4], cvxgen_avg, color=colors['g'], label='CVXGEN')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
