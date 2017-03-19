@@ -118,23 +118,35 @@ def gen_qp_matrices(k, n, gammas, version):
         #                   0 <= x <= 1
         P = spa.block_diag((2*D, 2*spa.eye(k)), format='csc')
         # q = np.append(-mu / gamma, np.zeros(k))
+        # q = np.append(-mu / gamma, np.zeros(k))
+        # A = spa.vstack([
+        #         spa.hstack([spa.csc_matrix(np.ones((1, n))),
+        #                    spa.csc_matrix((1, k))]),
+        #         spa.hstack([F.T, -spa.eye(k)]),
+        #         spa.hstack([spa.eye(n), spa.csc_matrix((n, k))])
+        #     ]).tocsc()
+        # l = np.hstack([1., np.zeros(k), np.zeros(n)])
+        # u = np.hstack([1., np.zeros(k), np.ones(n)])
+
         A = spa.vstack([
                 spa.hstack([spa.csc_matrix(np.ones((1, n))),
                            spa.csc_matrix((1, k))]),
-                spa.hstack([F.T, -spa.eye(k)]),
-                spa.hstack([spa.eye(n), spa.csc_matrix((n, k))])
+                spa.hstack([F.T, -spa.eye(k)])
             ]).tocsc()
-        l = np.hstack([1., np.zeros(k), np.zeros(n)])
-        u = np.hstack([1., np.zeros(k), np.ones(n)])
+        l = np.hstack([1., np.zeros(k)])   # Linear constraints
+        u = np.hstack([1., np.zeros(k)])
+        lx = np.zeros(n)   # Bounds
+        ux = np.ones(n)
+
 
         # Create linear cost vectors
         q_vecs = np.empty((k + n, 0))
         for gamma in gammas:
             q_vecs = np.column_stack((q_vecs,
                                       np.append(-mu / gamma, np.zeros(k))))
-        qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, k)
+        qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, k, lx, ux)
 
-        # Save matrices for CVXGEN
+        # Save matrices for CVXGEN (n<= 120)
         if n <= 120:
             io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
                        {'gammas': gammas,
@@ -173,10 +185,22 @@ def solve_loop(qp_matrices, solver='emosqp'):
     # Initialize number of iterations vector
     niter = np.zeros(n_prob)
 
+    # number of assets and factors
+    n = qp.n
+    k = qp.k
+
+
     if solver == 'emosqp':
+        # Construct qp matrices
+        Aosqp = spa.vstack((qp.A,
+                            spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
+                                       ))).tocsc()
+        losqp = np.append(qp.l, qp.lx)
+        uosqp = np.append(qp.u, qp.ux)
+
         # Pass the data to OSQP
         m = osqp.OSQP()
-        m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
+        m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp,
                 rho=0.05, alpha=1.5, sigma=0.001, verbose=False)
 
         # Get extension name
@@ -204,19 +228,26 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # DEBUG
             # solve with gurobi
             # import mathprogbasepy as mpbpy
-            # prob = mpbpy.QuadprogProblem(qp.P, q, qp.A, qp.l, qp.u)
+            # prob = mpbpy.QuadprogProblem(qp.P, q, Aosqp, losqp, uosqp)
             # res = prob.solve(solver=mpbpy.GUROBI)
+            # import ipdb; ipdb.set_trace()
 
     elif solver == 'qpoases':
+        '''
+        Sparse problem formulation qpOASES
+        '''
+        n_dim = qp.P.shape[0]  # Number of variables
+        m_dim = qp.A.shape[0]  # Number of constraints without bounds
 
-        n_dim = qp.P.shape[0]
-        m_dim = qp.A.shape[0]
+        # Construct bounds for qpoases
+        lx = np.append(qp.lx, -np.inf * np.ones(k))
+        ux = np.append(qp.ux, np.inf * np.ones(k))
 
         # Initialize qpoases and set options
         qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
-        options = qpoases.PyOptions()
-        options.printLevel = qpoases.PyPrintLevel.NONE
-        qpoases_m.setOptions(options)
+        # options = qpoases.PyOptions()
+        # options.printLevel = qpoases.PyPrintLevel.NONE
+        # qpoases_m.setOptions(options)
 
 
         for i in range(n_prob):
@@ -231,32 +262,41 @@ def solve_loop(qp_matrices, solver='emosqp'):
             nWSR = np.array([1000])
 
             if i == 0:
-                res_qpoases = qpoases_m.init(qp.P, q, qp.A, qp.lx, qp.ux,
-                                             qp.l, qp.u,
+                res_qpoases = qpoases_m.init(qp.P.todense(), q, qp.A.todense(),
+                                             np.ascontiguousarray(lx),
+                                             np.ascontiguousarray(ux),
+                                             np.ascontiguousarray(qp.l),
+                                             np.ascontiguousarray(qp.u),
                                              nWSR, qpoases_cpu_time)
             else:
                 # Solve new hot started problem
-                res_qpoases = qpoases_m.hotstart(q, qp.lx, qp.ux,
-                                                 qp.l, qp.u, nWSR,
+                res_qpoases = qpoases_m.hotstart(q,
+                                                 np.ascontiguousarray(lx),
+                                                 np.ascontiguousarray(ux),
+                                                 np.ascontiguousarray(qp.l),
+                                                 np.ascontiguousarray(qp.u),
+                                                 nWSR,
                                                  qpoases_cpu_time)
 
             # # DEBUG Solve with gurobi
             # qpoases solution
-            # sol_qpoases = np.zeros(qp.n)
-            # qpoases_m.getPrimalSolution(sol_qpoases)
-            # import mathprogbasepy as mpbpy
-            # Agrb = spa.vstack((spa.csc_matrix(qp.A),
-            #                    spa.eye(qp.n))).tocsc()
-            # lgrb = np.append(qp.l, qp.lx)
-            # ugrb = np.append(qp.u, qp.ux)
-            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
-            #                              Agrb, lgrb, ugrb)
-            # res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
-            # print("Norm difference x qpoases - GUROBI = %.4f" %
-            #       np.linalg.norm(sol_qpoases - res.x))
-            # print("Norm difference objval qpoases - GUROBI = %.4f" %
-            #       abs(qpoases_m.getObjVal() - res.obj_val))
+            sol_qpoases = np.zeros(n + k)
+            qpoases_m.getPrimalSolution(sol_qpoases)
+            import mathprogbasepy as mpbpy
+            Agrb = spa.vstack((qp.A,
+                                spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
+                                           ))).tocsc()
+            lgrb = np.append(qp.l, qp.lx)
+            ugrb = np.append(qp.u, qp.ux)
+            prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
+                                         Agrb, lgrb, ugrb)
+            res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
+            print("Norm difference x qpoases - GUROBI = %.4f" %
+                  np.linalg.norm(sol_qpoases - res.x))
+            print("Norm difference objval qpoases - GUROBI = %.4f" %
+                  abs(qpoases_m.getObjVal() - res.obj_val))
 
+            import ipdb; ipdb.set_trace()
             if res_qpoases != 0:
                 raise ValueError('qpoases did not solve the problem!')
 
@@ -268,7 +308,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
     elif solver == 'qpoases2':
         '''
-        qpoases
+        Dense problem formulation qpOASES
         '''
 
         n_dim = qp.P.shape[0]
@@ -374,10 +414,10 @@ for i in range(len(n_vec)):
     osqp_timing.append(timing)
     osqp_iter.append(niter)
 
-    # Solving loop with qpoases
-    timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
-    qpoases_timing.append(timing)
-    qpoases_iter.append(niter)
+    # # Solving loop with qpoases
+    # timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
+    # qpoases_timing.append(timing)
+    # qpoases_iter.append(niter)
 
     # Generate QP dense matrices
     qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
