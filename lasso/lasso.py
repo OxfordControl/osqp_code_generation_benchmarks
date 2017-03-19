@@ -106,7 +106,7 @@ def gen_qp_matrices(m, n, gammas, version):
 
     elif version == 'sparse':
         #       minimize	y.T * y + gamma * np.ones(n).T * t
-        #       subject to  y = Ax
+        #       subject to  y = Ax - b
         #                   -t <= x <= t
         P = spa.block_diag((spa.csc_matrix((n, n)), spa.eye(m),
                             spa.csc_matrix((n, n))), format='csc')
@@ -126,15 +126,18 @@ def gen_qp_matrices(m, n, gammas, version):
                 (q_vecs, np.append(np.zeros(n+m), gamma*np.ones(n))))
         qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, m)
 
-        # # Save matrices for CVXGEN
-        # if n <= 120:
-        #     io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
-        #                {'gammas': gammas,
-        #                 'Ad': Ad,
-        #                 'bd': bd})
-        #
+        # Save matrices for CVXGEN
+        if n <= 50:
+            cvxgen_dir = 'cvxgen/n%d/' % n
+            if not os.path.exists(cvxgen_dir):
+                os.mkdir(cvxgen_dir)
+            io.savemat(cvxgen_dir + 'datafilen%d.mat' % n,
+                       {'gammas': gammas,
+                        'Ad': Ad,
+                        'bd': bd})
+
         # Save matrices for FiOrdOs
-        fiordos_dir = 'fiordos/n%d' % n
+        fiordos_dir = 'fiordos/n%d/' % n
         if not os.path.exists(fiordos_dir):
             os.mkdir(fiordos_dir)
         io.savemat(fiordos_dir + 'datafilen%d.mat' % n,
@@ -170,14 +173,14 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.01, alpha=1.5, sigma=0.001, verbose=False)
+                rho=0.01, alpha=1.4, sigma=0.001, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
 
         # Generate the code
         m.codegen("code", python_ext_name=module_name,
-                  force_rewrite=True, loop_unrolling=True)
+                  force_rewrite=True, loop_unrolling=False)
 
         # Import module
         emosqp = importlib.import_module(module_name)
@@ -254,22 +257,22 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
             # # DEBUG Solve with gurobi
             # qpoases solution
-            sol_qpoases = np.zeros(n_dim)
-            qpoases_m.getPrimalSolution(sol_qpoases)
-            import mathprogbasepy as mpbpy
-            Agrb = spa.csc_matrix(qp.A).tocsc()
-            lgrb = qp.l
-            ugrb = qp.u
-            prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
-                                         Agrb, lgrb, ugrb)
-            res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
-            # print("Norm difference x qpoases - GUROBI = %.4f" %
-            #       np.linalg.norm(sol_qpoases - res.x))
-            # print("Norm difference objval qpoases - GUROBI = %.4f" %
-            #       abs(qpoases_m.getObjVal() - res.obj_val))
-            if np.linalg.norm(sol_qpoases - res.x) > 1e-03:
-                print("Different solution GUROBI! ")
-                import ipdb; ipdb.set_trace()
+            # sol_qpoases = np.zeros(n_dim)
+            # qpoases_m.getPrimalSolution(sol_qpoases)
+            # import mathprogbasepy as mpbpy
+            # Agrb = spa.csc_matrix(qp.A).tocsc()
+            # lgrb = qp.l
+            # ugrb = qp.u
+            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
+            #                              Agrb, lgrb, ugrb)
+            # res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
+            # # print("Norm difference x qpoases - GUROBI = %.4f" %
+            # #       np.linalg.norm(sol_qpoases - res.x))
+            # # print("Norm difference objval qpoases - GUROBI = %.4f" %
+            # #       abs(qpoases_m.getObjVal() - res.obj_val))
+            # if np.linalg.norm(sol_qpoases - res.x) > 1e-03:
+            #     print("Different solution GUROBI! ")
+            #     import ipdb; ipdb.set_trace()
 
 
 
@@ -290,7 +293,8 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 # Variables
 # n_vec = np.array([20, 30, 50])
-n_vec = np.array([100, 200, 300])
+# n_vec = np.array([100, 200, 300, 400, 500])
+n_vec = np.array([10, 20, 30, 50, 80, 100, 150, 200, 250, 300, 350, 400])
 
 
 # Measurements
@@ -354,8 +358,8 @@ qpoases_avg = np.array([x.avg for x in qpoases_timing])
 
 plt.figure()
 ax = plt.gca()
-plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
-plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
+plt.semilogy(n_vec, osqp_avg, color='C1', label='OSQP')
+plt.semilogy(n_vec, qpoases_avg, color='C2', label='qpOASES')
 # plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
 # plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
 plt.legend()
