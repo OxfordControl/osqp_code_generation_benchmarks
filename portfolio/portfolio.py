@@ -266,6 +266,68 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # Save number of iterations
             niter[i] = nWSR[0]
 
+    elif solver == 'qpoases2':
+        '''
+        qpoases
+        '''
+
+        n_dim = qp.P.shape[0]
+        m_dim = qp.A.shape[0]
+
+        # Initialize qpoases and set options
+        qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
+        options = qpoases.PyOptions()
+        options.printLevel = qpoases.PyPrintLevel.NONE
+        qpoases_m.setOptions(options)
+
+
+        for i in range(n_prob):
+
+            # Get linera cost as contiguous array
+            q = np.ascontiguousarray(qp.q_vecs[:, i])
+
+            # Reset cpu time
+            qpoases_cpu_time = np.array([20.])
+
+            # Reset number of of working set recalculations
+            nWSR = np.array([1000])
+
+            if i == 0:
+                res_qpoases = qpoases_m.init(qp.P, q, qp.A, qp.lx, qp.ux,
+                                             qp.l, qp.u,
+                                             nWSR, qpoases_cpu_time)
+            else:
+                # Solve new hot started problem
+                res_qpoases = qpoases_m.hotstart(q, qp.lx, qp.ux,
+                                                 qp.l, qp.u, nWSR,
+                                                 qpoases_cpu_time)
+
+            # # DEBUG Solve with gurobi
+            # qpoases solution
+            # sol_qpoases = np.zeros(qp.n)
+            # qpoases_m.getPrimalSolution(sol_qpoases)
+            # import mathprogbasepy as mpbpy
+            # Agrb = spa.vstack((spa.csc_matrix(qp.A),
+            #                    spa.eye(qp.n))).tocsc()
+            # lgrb = np.append(qp.l, qp.lx)
+            # ugrb = np.append(qp.u, qp.ux)
+            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
+            #                              Agrb, lgrb, ugrb)
+            # res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
+            # print("Norm difference x qpoases - GUROBI = %.4f" %
+            #       np.linalg.norm(sol_qpoases - res.x))
+            # print("Norm difference objval qpoases - GUROBI = %.4f" %
+            #       abs(qpoases_m.getObjVal() - res.obj_val))
+
+            if res_qpoases != 0:
+                raise ValueError('qpoases did not solve the problem!')
+
+            # Save time
+            time[i] = qpoases_cpu_time[0]
+
+            # Save number of iterations
+            niter[i] = nWSR[0]
+
     else:
         raise ValueError('Solver not understood')
 
@@ -294,19 +356,14 @@ k_vec = (n_vec / 10).astype(int)
 osqp_timing = []
 osqp_iter = []
 qpoases_timing = []
+qpoases2_timing = []
 qpoases_iter = []
+qpoases2_iter = []
 
 
 for i in range(len(n_vec)):
 
-    # Generate QP dense matrices
-    qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
-                                        gammas, 'dense')
 
-    # Solving loop with qpoases
-    timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
-    qpoases_timing.append(timing)
-    qpoases_iter.append(niter)
 
     # Generate QP sparsematrices
     qp_matrices_sparse = gen_qp_matrices(k_vec[i], n_vec[i],
@@ -316,6 +373,20 @@ for i in range(len(n_vec)):
     timing, niter = solve_loop(qp_matrices_sparse, 'emosqp')
     osqp_timing.append(timing)
     osqp_iter.append(niter)
+
+    # Solving loop with qpoases
+    timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
+    qpoases_timing.append(timing)
+    qpoases_iter.append(niter)
+
+    # Generate QP dense matrices
+    qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
+                                        gammas, 'dense')
+
+    # Solving loop with qpoases
+    timing, niter = solve_loop(qp_matrices_dense, 'qpoases2')
+    qpoases2_timing.append(timing)
+    qpoases2_iter.append(niter)
 
 
 '''
