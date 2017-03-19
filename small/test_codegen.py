@@ -4,8 +4,8 @@ import osqp
 
 np.random.seed(3)
 
-n = 10
-m = 20
+n = 1000
+m = 2000
 P = spa.rand(n, n, density=.2, format='csc')
 P = (P.T).dot(P)
 q = np.random.randn(n)

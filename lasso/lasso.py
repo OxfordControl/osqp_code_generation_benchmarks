@@ -18,7 +18,7 @@ import importlib
 import osqp
 
 # Import qpoases
-# import qpoases as qpoases
+import qpoases
 
 # Plotting
 import matplotlib.pylab as plt
@@ -134,7 +134,10 @@ def gen_qp_matrices(m, n, gammas, version):
         #                 'bd': bd})
         #
         # Save matrices for FiOrdOs
-        io.savemat('fiordos/n%d/datafilen%d.mat' % (n, n),
+        fiordos_dir = 'fiordos/n%d' % n
+        if not os.path.exists(fiordos_dir):
+            os.mkdir(fiordos_dir)
+        io.savemat(fiordos_dir + 'datafilen%d.mat' % n,
                    {'gammas': gammas,
                     'Ad': Ad,
                     'bd': bd})
@@ -167,14 +170,14 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.05, alpha=1.5, sigma=0.001, verbose=False)
+                rho=0.01, alpha=1.5, sigma=0.001, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
 
         # Generate the code
-        m.codegen("code", python_ext_name=module_name, force_rewrite=True,
-                  loop_unrolling=False)
+        m.codegen("code", python_ext_name=module_name,
+                  force_rewrite=True, loop_unrolling=True)
 
         # Import module
         emosqp = importlib.import_module(module_name)
@@ -190,7 +193,9 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
             # Check if status correct
             if status != 1:
-                raise ValueError('OSQP did not solve the problem!')
+                print('OSQP did not solve the problem!')
+                import ipdb; ipdb.set_trace()
+                # raise ValueError('OSQP did not solve the problem!')
 
             # DEBUG
             # solve with gurobi
@@ -198,46 +203,75 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # prob = mpbpy.QuadprogProblem(qp.P, q, qp.A, qp.l, qp.u)
             # res = prob.solve(solver=mpbpy.GUROBI)
 
-    # elif solver == 'qpoases':
-    #
-    #     n_dim = qp.P.shape[0]
-    #     m_dim = qp.A.shape[0]
-    #
-    #     # Initialize qpoases and set options
-    #     qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
-    #     options = qpoases.PyOptions()
-    #     options.printLevel = qpoases.PyPrintLevel.NONE
-    #     qpoases_m.setOptions(options)
-    #
-    #     for i in range(n_prob):
-    #
-    #         # Get linera cost as contiguous array
-    #         q = np.ascontiguousarray(qp.q_vecs[:, i])
-    #
-    #         # Reset cpu time
-    #         qpoases_cpu_time = np.array([20.])
-    #
-    #         # Reset number of of working set recalculations
-    #         nWSR = np.array([1000])
-    #
-    #         if i == 0:
-    #             res_qpoases = qpoases_m.init(qp.P, q, qp.A, qp.lx, qp.ux,
-    #                                          qp.l, qp.u,
-    #                                          nWSR, qpoases_cpu_time)
-    #         else:
-    #             # Solve new hot started problem
-    #             res_qpoases = qpoases_m.hotstart(q, qp.lx, qp.ux,
-    #                                              qp.l, qp.u, nWSR,
-    #                                              qpoases_cpu_time)
-    #
-    #         if res_qpoases != 0:
-    #             raise ValueError('qpoases did not solve the problem!')
-    #
-    #         # Save time
-    #         time[i] = qpoases_cpu_time[0]
-    #
-    #         # Save number of iterations
-    #         niter[i] = nWSR[0]
+    elif solver == 'qpoases':
+
+        n_dim = qp.P.shape[0]
+        m_dim = qp.A.shape[0]
+
+        # Initialize qpoases and set options
+        qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
+        options = qpoases.PyOptions()
+        options.printLevel = qpoases.PyPrintLevel.NONE
+        qpoases_m.setOptions(options)
+
+
+        # Setup matrix P and A
+        P = np.ascontiguousarray(qp.P.todense())
+        A = np.ascontiguousarray(qp.A.todense())
+
+        for i in range(n_prob):
+
+            # Get linera cost as contiguous array
+            q = np.ascontiguousarray(qp.q_vecs[:, i])
+
+            # Reset cpu time
+            qpoases_cpu_time = np.array([60.])
+
+            # Reset number of of working set recalculations
+            nWSR = np.array([10000])
+
+            if i == 0:
+                res_qpoases = qpoases_m.init(P, q, A,
+                                             None, None,
+                                             qp.l, qp.u,
+                                             nWSR, qpoases_cpu_time)
+            else:
+                # Solve new hot started problem
+                res_qpoases = qpoases_m.hotstart(q, None, None,
+                                                 qp.l, qp.u, nWSR,
+                                                 qpoases_cpu_time)
+
+            # if res_qpoases != 0:
+            #     import ipdb; ipdb.set_trace()
+            #     raise ValueError('qpoases did not solve the problem!')
+
+            # Save time
+            time[i] = qpoases_cpu_time[0]
+
+            # Save number of iterations
+            niter[i] = nWSR[0]
+
+
+            # # DEBUG Solve with gurobi
+            # qpoases solution
+            sol_qpoases = np.zeros(n_dim)
+            qpoases_m.getPrimalSolution(sol_qpoases)
+            import mathprogbasepy as mpbpy
+            Agrb = spa.csc_matrix(qp.A).tocsc()
+            lgrb = qp.l
+            ugrb = qp.u
+            prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
+                                         Agrb, lgrb, ugrb)
+            res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
+            # print("Norm difference x qpoases - GUROBI = %.4f" %
+            #       np.linalg.norm(sol_qpoases - res.x))
+            # print("Norm difference objval qpoases - GUROBI = %.4f" %
+            #       abs(qpoases_m.getObjVal() - res.obj_val))
+            if np.linalg.norm(sol_qpoases - res.x) > 1e-03:
+                print("Different solution GUROBI! ")
+                import ipdb; ipdb.set_trace()
+
+
 
     else:
         raise ValueError('Solver not understood')
@@ -255,7 +289,9 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Variables
-n_vec = np.array([20, 30, 50])
+# n_vec = np.array([20, 30, 50])
+n_vec = np.array([100, 200, 300])
+
 
 # Measurements
 m_vec = (10 * n_vec).astype(int)
@@ -270,14 +306,9 @@ qpoases_iter = []
 
 for i in range(len(n_vec)):
 
-    # # Generate QP dense matrices
-    # qp_matrices_dense = gen_qp_matrices(m_vec[i], n_vec[i],
-    #                                     gammas, 'dense')
-    #
-    # # Solving loop with qpoases
-    # timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
-    # qpoases_timing.append(timing)
-    # qpoases_iter.append(niter)
+    # Generate QP dense matrices
+    qp_matrices_dense = gen_qp_matrices(m_vec[i], n_vec[i],
+                                        gammas, 'dense')
 
     # Generate QP sparsematrices
     qp_matrices_sparse = gen_qp_matrices(m_vec[i], n_vec[i],
@@ -287,6 +318,11 @@ for i in range(len(n_vec)):
     timing, niter = solve_loop(qp_matrices_sparse, 'emosqp')
     osqp_timing.append(timing)
     osqp_iter.append(niter)
+
+    # Solving loop with qpoases
+    timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
+    qpoases_timing.append(timing)
+    qpoases_iter.append(niter)
 
 
 # '''
@@ -312,19 +348,19 @@ for i in range(len(n_vec)):
 
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
-# qpoases_avg = np.array([x.avg for x in qpoases_timing])
+qpoases_avg = np.array([x.avg for x in qpoases_timing])
 # cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 # fiordos_avg = fiordos_results['avg_vec'].flatten()
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
-# plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
+plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
 # plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
 # plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
 plt.legend()
 plt.grid()
-ax.set_xlabel(r'Number of assets $n$')
+ax.set_xlabel(r'Number of parameters $n$')
 ax.set_ylabel(r'Time [s]')
 plt.tight_layout()
 plt.show(block=False)
