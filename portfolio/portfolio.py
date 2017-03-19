@@ -239,16 +239,20 @@ def solve_loop(qp_matrices, solver='emosqp'):
         n_dim = qp.P.shape[0]  # Number of variables
         m_dim = qp.A.shape[0]  # Number of constraints without bounds
 
+
+        # Initialize qpoases and set options
+        qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
+        options = qpoases.PyOptions()
+        options.printLevel = qpoases.PyPrintLevel.NONE
+        qpoases_m.setOptions(options)
+
         # Construct bounds for qpoases
         lx = np.append(qp.lx, -np.inf * np.ones(k))
         ux = np.append(qp.ux, np.inf * np.ones(k))
 
-        # Initialize qpoases and set options
-        qpoases_m = qpoases.PyQProblem(n_dim, m_dim)
-        # options = qpoases.PyOptions()
-        # options.printLevel = qpoases.PyPrintLevel.NONE
-        # qpoases_m.setOptions(options)
-
+        # Setup matrix P and A
+        P = np.ascontiguousarray(qp.P.todense())
+        A = np.ascontiguousarray(qp.A.todense())
 
         for i in range(n_prob):
 
@@ -262,7 +266,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
             nWSR = np.array([1000])
 
             if i == 0:
-                res_qpoases = qpoases_m.init(qp.P.todense(), q, qp.A.todense(),
+                res_qpoases = qpoases_m.init(P, q, A,
                                              np.ascontiguousarray(lx),
                                              np.ascontiguousarray(ux),
                                              np.ascontiguousarray(qp.l),
@@ -280,23 +284,23 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
             # # DEBUG Solve with gurobi
             # qpoases solution
-            sol_qpoases = np.zeros(n + k)
-            qpoases_m.getPrimalSolution(sol_qpoases)
-            import mathprogbasepy as mpbpy
-            Agrb = spa.vstack((qp.A,
-                                spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
-                                           ))).tocsc()
-            lgrb = np.append(qp.l, qp.lx)
-            ugrb = np.append(qp.u, qp.ux)
-            prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
-                                         Agrb, lgrb, ugrb)
-            res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
-            print("Norm difference x qpoases - GUROBI = %.4f" %
-                  np.linalg.norm(sol_qpoases - res.x))
-            print("Norm difference objval qpoases - GUROBI = %.4f" %
-                  abs(qpoases_m.getObjVal() - res.obj_val))
+            # sol_qpoases = np.zeros(n + k)
+            # qpoases_m.getPrimalSolution(sol_qpoases)
+            # import mathprogbasepy as mpbpy
+            # Agrb = spa.vstack((qp.A,
+            #                     spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
+            #                                ))).tocsc()
+            # lgrb = np.append(qp.l, qp.lx)
+            # ugrb = np.append(qp.u, qp.ux)
+            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
+            #                              Agrb, lgrb, ugrb)
+            # res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
+            # print("Norm difference x qpoases - GUROBI = %.4f" %
+            #       np.linalg.norm(sol_qpoases - res.x))
+            # print("Norm difference objval qpoases - GUROBI = %.4f" %
+            #       abs(qpoases_m.getObjVal() - res.obj_val))
+            # import ipdb; ipdb.set_trace()
 
-            import ipdb; ipdb.set_trace()
             if res_qpoases != 0:
                 raise ValueError('qpoases did not solve the problem!')
 
@@ -414,10 +418,10 @@ for i in range(len(n_vec)):
     osqp_timing.append(timing)
     osqp_iter.append(niter)
 
-    # # Solving loop with qpoases
-    # timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
-    # qpoases_timing.append(timing)
-    # qpoases_iter.append(niter)
+    # Solving loop with qpoases
+    timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
+    qpoases_timing.append(timing)
+    qpoases_iter.append(niter)
 
     # Generate QP dense matrices
     qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
@@ -453,15 +457,18 @@ fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
+qpoases2_avg = np.array([x.avg for x in qpoases2_timing])
 cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 fiordos_avg = fiordos_results['avg_vec'].flatten()
 
 plt.figure()
 ax = plt.gca()
-plt.semilogy(n_vec, osqp_avg, color=colors['b'], label='OSQP')
-plt.semilogy(n_vec, qpoases_avg, color=colors['o'], label='qpOASES')
-plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
-plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
+plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
+plt.semilogy(n_vec, qpoases_avg, color='C1', label='qpOASES')
+plt.semilogy(n_vec, qpoases2_avg, color='C2', label='qpOASES2')
+plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)],
+             color='C3', label='CVXGEN')
+plt.semilogy(n_vec, fiordos_avg[:10], color='C4', label='FiOrdOs')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
