@@ -206,3 +206,5 @@ mpc_pendulum/code
 mpc_pendulum/fiordos/data
 mpc_pendulum/fiordos/fiordos_code
 mpc_pendulum/fiordos/old_files
+lasso/code
+lasso/fiordos/**/code
