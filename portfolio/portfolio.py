@@ -79,7 +79,7 @@ def gen_qp_matrices(k, n, gammas, version):
     # Problem parameters
     # k = 10
     # n = 200
-    dens_lvl = 0.4
+    dens_lvl = 0.5
 
     # Generate data
     F = spa.random(n, k, density=dens_lvl, format='csc')
@@ -386,13 +386,14 @@ def solve_loop(qp_matrices, solver='emosqp'):
 Solve problems
 '''
 # Generate gamma parameters and cost vectors
-n_gamma = 21
+n_gamma = 11
 gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300])
+n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300, 400, 500])
 # n_vec = np.array([20, 30, 50])
+# n_vec = np.array([500])
 
 # Factors
 k_vec = (n_vec / 10).astype(int)

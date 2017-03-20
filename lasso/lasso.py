@@ -19,6 +19,7 @@ import osqp
 
 # Import qpoases
 import qpoases
+import pickle
 
 # Plotting
 import matplotlib.pylab as plt
@@ -126,24 +127,24 @@ def gen_qp_matrices(m, n, gammas, version):
                 (q_vecs, np.append(np.zeros(n+m), gamma*np.ones(n))))
         qp_matrices = QPmatrices(P, q_vecs, A, l, u, n, m)
 
-        # Save matrices for CVXGEN
-        if n <= 50:
-            cvxgen_dir = 'cvxgen/n%d/' % n
-            if not os.path.exists(cvxgen_dir):
-                os.mkdir(cvxgen_dir)
-            io.savemat(cvxgen_dir + 'datafilen%d.mat' % n,
-                       {'gammas': gammas,
-                        'Ad': Ad,
-                        'bd': bd})
-
-        # Save matrices for FiOrdOs
-        fiordos_dir = 'fiordos/n%d/' % n
-        if not os.path.exists(fiordos_dir):
-            os.mkdir(fiordos_dir)
-        io.savemat(fiordos_dir + 'datafilen%d.mat' % n,
-                   {'gammas': gammas,
-                    'Ad': Ad,
-                    'bd': bd})
+        # # Save matrices for CVXGEN
+        # if n <= 50:
+        #     cvxgen_dir = 'cvxgen/n%d/' % n
+        #     if not os.path.exists(cvxgen_dir):
+        #         os.mkdir(cvxgen_dir)
+        #     io.savemat(cvxgen_dir + 'datafilen%d.mat' % n,
+        #                {'gammas': gammas,
+        #                 'Ad': Ad,
+        #                 'bd': bd})
+        #
+        # # Save matrices for FiOrdOs
+        # fiordos_dir = 'fiordos/n%d/' % n
+        # if not os.path.exists(fiordos_dir):
+        #     os.mkdir(fiordos_dir)
+        # io.savemat(fiordos_dir + 'datafilen%d.mat' % n,
+        #            {'gammas': gammas,
+        #             'Ad': Ad,
+        #             'bd': bd})
 
     # Return QP matrices
     return qp_matrices
@@ -173,7 +174,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], qp.A, qp.l, qp.u,
-                rho=0.01, alpha=1.4, sigma=0.001, verbose=False)
+                rho=0.01, alpha=1.4, sigma=0.001, verbose=False, early_terminate_interval=25)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -228,7 +229,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
             q = np.ascontiguousarray(qp.q_vecs[:, i])
 
             # Reset cpu time
-            qpoases_cpu_time = np.array([60.])
+            qpoases_cpu_time = np.array([10.])
 
             # Reset number of of working set recalculations
             nWSR = np.array([10000])
@@ -304,15 +305,15 @@ m_vec = (10 * n_vec).astype(int)
 # Define statistics for osqp and qpoases
 osqp_timing = []
 osqp_iter = []
-qpoases_timing = []
-qpoases_iter = []
+# qpoases_timing = []
+# qpoases_iter = []
 
 
 for i in range(len(n_vec)):
 
     # Generate QP dense matrices
-    qp_matrices_dense = gen_qp_matrices(m_vec[i], n_vec[i],
-                                        gammas, 'dense')
+    # qp_matrices_dense = gen_qp_matrices(m_vec[i], n_vec[i],
+    #                                     gammas, 'dense')
 
     # Generate QP sparsematrices
     qp_matrices_sparse = gen_qp_matrices(m_vec[i], n_vec[i],
@@ -323,43 +324,35 @@ for i in range(len(n_vec)):
     osqp_timing.append(timing)
     osqp_iter.append(niter)
 
-    # Solving loop with qpoases
-    timing, niter = solve_loop(qp_matrices_dense, 'qpoases')
-    qpoases_timing.append(timing)
-    qpoases_iter.append(niter)
+    # # Solving loop with qpoases
+    # timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
+    # qpoases_timing.append(timing)
+    # qpoases_iter.append(niter)
 
 
-# '''
-# Get CVXGEN timings
-# '''
-# cur_dir = os.getcwd()
-# os.chdir('cvxgen')
-# call(["matlab", "-nodesktop", "-nosplash",
-#       "-r", "run run_all; exit;"])
-# os.chdir(cur_dir)
-# cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
-#
-#
-# '''
-# Get FiOrdOs timings
-# '''
-# cur_dir = os.getcwd()
-# os.chdir('fiordos')
-# call(["matlab", "-nodesktop", "-nosplash",
-#       "-r", "run run_all; exit;"])
-# os.chdir(cur_dir)
-# fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
+
+# Dump qpoases timings
+# with open('qpoases/timing.pickle', 'wb') as f:
+#             pickle.dump({'timing': qpoases_timing,
+#                          'iter': qpoases_iter}, f)
+
+# Load qpoases timings
+with open('qpoases/timing.pickle', 'rb') as f:
+    qpoases_structs = pickle.load(f)
+qpoases_timing = qpoases_structs['timing']
+qpoases_iter = qpoases_structs['iter']
+
+
 
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
-qpoases_avg = np.array([x.avg for x in qpoases_timing])
-# cvxgen_avg = cvxgen_results['avg_vec'].flatten()
-# fiordos_avg = fiordos_results['avg_vec'].flatten()
+qpoases_avg = np.array([x.avg for x in qpoases_timing if x.avg < 9.7])
+
 
 plt.figure()
 ax = plt.gca()
-plt.semilogy(n_vec, osqp_avg, color='C1', label='OSQP')
-plt.semilogy(n_vec, qpoases_avg, color='C2', label='qpOASES')
+plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
+plt.semilogy(n_vec[:len(qpoases_avg)], qpoases_avg, color='C1', label='qpOASES')
 # plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
 # plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
 plt.legend()
