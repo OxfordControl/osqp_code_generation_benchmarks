@@ -201,6 +201,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         # Pass the data to OSQP
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp,
+                eps_abs=1e-03, eps_rel=1e-03,
                 rho=0.05, alpha=1.5, sigma=0.001, verbose=False)
 
         # Get extension name
