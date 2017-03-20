@@ -255,27 +255,26 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # Save number of iterations
             niter[i] = nWSR[0]
 
+    elif solver == 'gurobi':
 
-            # # DEBUG Solve with gurobi
-            # qpoases solution
-            # sol_qpoases = np.zeros(n_dim)
-            # qpoases_m.getPrimalSolution(sol_qpoases)
-            # import mathprogbasepy as mpbpy
-            # Agrb = spa.csc_matrix(qp.A).tocsc()
-            # lgrb = qp.l
-            # ugrb = qp.u
-            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
-            #                              Agrb, lgrb, ugrb)
-            # res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
-            # # print("Norm difference x qpoases - GUROBI = %.4f" %
-            # #       np.linalg.norm(sol_qpoases - res.x))
-            # # print("Norm difference objval qpoases - GUROBI = %.4f" %
-            # #       abs(qpoases_m.getObjVal() - res.obj_val))
-            # if np.linalg.norm(sol_qpoases - res.x) > 1e-03:
-            #     print("Different solution GUROBI! ")
-            #     import ipdb; ipdb.set_trace()
+        n_dim = qp.P.shape[0]
+        m_dim = qp.A.shape[0]
 
+        for i in range(n_prob):
 
+            # Get linera cost as contiguous array
+            q = np.ascontiguousarray(qp.q_vecs[:, i])
+
+            # solve with gurobi
+            import mathprogbasepy as mpbpy
+            prob = mpbpy.QuadprogProblem(qp.P, q, qp.A, qp.l, qp.u)
+            res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
+
+            # Save time
+            time[i] = res.cputime
+
+            # Save number of iterations
+            niter[i] = res.total_iter
 
     else:
         raise ValueError('Solver not understood')
@@ -285,7 +284,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
 
 '''
-Solve problems
+Problem parameters
 '''
 # Generate gamma parameters and cost vectors
 n_gamma = 21
@@ -297,23 +296,27 @@ gammas = np.logspace(-2, 2, n_gamma)
 # n_vec = np.array([100, 200, 300, 400, 500])
 n_vec = np.array([10, 20, 30, 50, 80, 100, 150, 200, 250, 300, 350, 400])
 
-
 # Measurements
 m_vec = (10 * n_vec).astype(int)
 
+# Setup if solve with gurobi/qpoases or not
+solve_qpoases = False
+solve_gurobi = False
 
 # Define statistics for osqp and qpoases
 osqp_timing = []
 osqp_iter = []
-# qpoases_timing = []
-# qpoases_iter = []
+if solve_gurobi:
+    gurobi_iter = []
+    gurobi_timing = []
+if solve_qpoases:
+    qpoases_timing = []
+    qpoases_iter = []
 
-
+'''
+Solve problems
+'''
 for i in range(len(n_vec)):
-
-    # Generate QP dense matrices
-    # qp_matrices_dense = gen_qp_matrices(m_vec[i], n_vec[i],
-    #                                     gammas, 'dense')
 
     # Generate QP sparsematrices
     qp_matrices_sparse = gen_qp_matrices(m_vec[i], n_vec[i],
@@ -324,37 +327,59 @@ for i in range(len(n_vec)):
     osqp_timing.append(timing)
     osqp_iter.append(niter)
 
-    # # Solving loop with qpoases
-    # timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
-    # qpoases_timing.append(timing)
-    # qpoases_iter.append(niter)
+
+    if solve_qpoases:
+        # Solving loop with qpoases
+        timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
+        qpoases_timing.append(timing)
+        qpoases_iter.append(niter)
+
+    if solve_gurobi:
+        # Solve loop with gurobi
+        timing, niter = solve_loop(qp_matrices_sparse, 'gurobi')
+        gurobi_timing.append(timing)
+        gurobi_iter.append(niter)
 
 
+if solve_qpoases:
+    # Dump qpoases timings
+    with open('qpoases/timing.pickle', 'wb') as f:
+                pickle.dump({'timing': qpoases_timing,
+                             'iter': qpoases_iter}, f)
 
-# Dump qpoases timings
-# with open('qpoases/timing.pickle', 'wb') as f:
-#             pickle.dump({'timing': qpoases_timing,
-#                          'iter': qpoases_iter}, f)
+if solve_gurobi:
+    # Dump gurobi timings
+    with open('gurobi/timing.pickle', 'wb') as f:
+                pickle.dump({'timing': gurobi_timing,
+                             'iter': gurobi_iter}, f)
 
-# Load qpoases timings
-with open('qpoases/timing.pickle', 'rb') as f:
-    qpoases_structs = pickle.load(f)
-qpoases_timing = qpoases_structs['timing']
-qpoases_iter = qpoases_structs['iter']
 
+if not solve_qpoases:
+    # Load qpoases timings
+    with open('qpoases/timing.pickle', 'rb') as f:
+        qpoases_structs = pickle.load(f)
+    qpoases_timing = qpoases_structs['timing']
+    qpoases_iter = qpoases_structs['iter']
+
+if not solve_gurobi:
+    # Load gurobi timings
+    with open('gurobi/timing.pickle', 'rb') as f:
+        gurobi_structs = pickle.load(f)
+    gurobi_timing = gurobi_structs['timing']
+    gurobi_iter = gurobi_structs['iter']
 
 
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
-qpoases_avg = np.array([x.avg for x in qpoases_timing if x.avg < 9.7])
+qpoases_avg = np.array([x.avg for x in qpoases_timing if x.avg < 9])
+gurobi_avg = np.array([x.avg for x in gurobi_timing])
 
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
 plt.semilogy(n_vec[:len(qpoases_avg)], qpoases_avg, color='C1', label='qpOASES')
-# plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)], color=colors['g'], label='CVXGEN')
-# plt.semilogy(n_vec, fiordos_avg[:10], color=colors['r'], label='FiOrdOs')
+plt.semilogy(n_vec, gurobi_avg, color='C5', label='GUROBI')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of parameters $n$')
