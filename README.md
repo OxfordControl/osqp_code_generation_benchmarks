@@ -8,8 +8,9 @@ We currently compare
 -   CVXGEN
 -   OSQP code generation
 -   qpOASES
+-   GUROBI
 
 ## Problems
 
 -   Portfolio optimization
--   Linear MPC
+-   Lasso
