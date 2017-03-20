@@ -1,0 +1,38 @@
+# Produced by CVXGEN, 2017-03-20 03:20:31 -0400.
+# CVXGEN is Copyright (C) 2006-2012 Jacob Mattingley, jem@cvxgen.com.
+# The code in this file is Copyright (C) 2006-2012 Jacob Mattingley.
+# CVXGEN, or solvers produced by CVXGEN, cannot be used for commercial
+# applications without prior written permission from Jacob Mattingley.
+
+# Filename: description.cvxgen.
+# Description: A description of the CVXGEN problem.
+
+dimensions
+  m = 1  # inputs.
+  n = 4  # states.
+  N = 20  # horizon.
+end
+
+parameters
+  A (n,n)  # dynamics matrix.
+  B (n,m)  # transfer matrix.
+  QN (n,n) psd  # state cost.
+  Q (n,n) psd # diagonal
+  R (m,m) psd  # input cost.
+  x[0] (n)  # initial state.
+  x_max(n) nonnegative
+  u_max(m) nonnegative  # amplitude limit.
+end
+
+variables
+  x[t] (n), t=1..N+1  # state.
+  u[t] (m), t=0..N  # input.
+end
+
+minimize
+  sum[t=0..N](quad(x[t], Q) + quad(u[t], R)) + quad(x[N+1], QN)
+subject to
+  x[t+1] == A*x[t] + B*u[t], t=0..N  # dynamics constraints.
+  abs(x[t]) <= x_max, t=1..N+1  # maximum input box constraint.
+  abs(u[t]) <= u_max, t=0..N  # maximum input box constraint.
+end
