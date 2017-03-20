@@ -74,7 +74,7 @@ l = np.hstack([b(x, nx, N), gl])
 u = np.hstack([b(x, nx, N), gu])
 
 m = osqp.OSQP()
-m.setup(P, q, A, l, u, eps_rel=1e-2, eps_abs=1e-2,
+m.setup(P, q, A, l, u, eps_rel=1e-3, eps_abs=1e-3,
         rho=1e-1, sigma=1e-5, alpha=1.95, max_iter=3000)
 
 # Generate the code
@@ -88,14 +88,13 @@ Apply MPC in closed loop
 import emosqp
 
 # Apply MPC to the system
-sim_steps = 100
+sim_steps = 20
 
-B = dyn_B.T.toarray()[0]
 for i in range(sim_steps):
 
     # Solve
     sol = emosqp.solve()
-    u = sol[0][(N+1)*nx]
+    u = sol[0][-N*nu:-(N-1)*nu]
     status_val = sol[2]
     numofiter = sol[3]
     runtime = 1000*sol[4]
@@ -108,7 +107,7 @@ for i in range(sim_steps):
         break
 
     # Apply first control input to the plant
-    x = dyn_A.dot(x) + B.dot(u)
+    x = dyn_A.dot(x) + dyn_B.dot(u)
 
     # Update initial state
     l_new = np.hstack([b(x, nx, N), gl])
