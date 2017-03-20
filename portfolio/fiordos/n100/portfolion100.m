@@ -20,7 +20,7 @@ s = Solver(op, 'approach', 'dual', 'algoOuter', 'fgm');
 s.setSettings('approach', 'inlineA', 1);
 
 % Algorithm settings
-s.setSettings('algoOuter', 'stopg', true, 'stopgEps', 1e-4);
+s.setSettings('algoOuter', 'stopg', true, 'stopgEps', 1e-3);
 s.setSettings('algoOuter', 'init', zeros(k+1, 1), 'maxit', 50000);
 
 % Generate code
