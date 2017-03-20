@@ -374,6 +374,31 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # Save number of iterations
             niter[i] = nWSR[0]
 
+    elif solver == 'gurobi':
+
+        # Construct qp matrices
+        Agurobi = spa.vstack((qp.A,
+                              spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
+                                         ))).tocsc()
+        lgurobi = np.append(qp.l, qp.lx)
+        ugurobi = np.append(qp.u, qp.ux)
+
+        for i in range(n_prob):
+
+            # Get linera cost as contiguous array
+            q = np.ascontiguousarray(qp.q_vecs[:, i])
+
+            # solve with gurobi
+            import mathprogbasepy as mpbpy
+            prob = mpbpy.QuadprogProblem(qp.P, q, Agurobi, lgurobi, ugurobi)
+            res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
+
+            # Save time
+            time[i] = res.cputime
+
+            # Save number of iterations
+            niter[i] = res.total_iter
+
     else:
         raise ValueError('Solver not understood')
 
@@ -403,10 +428,9 @@ k_vec = (n_vec / 10).astype(int)
 osqp_timing = []
 osqp_iter = []
 qpoases_timing = []
-# qpoases2_timing = []
 qpoases_iter = []
-# qpoases2_iter = []
-
+gurobi_iter = []
+gurobi_timing = []
 
 for i in range(len(n_vec)):
 
@@ -425,6 +449,11 @@ for i in range(len(n_vec)):
     timing, niter = solve_loop(qp_matrices_sparse, 'qpoases')
     qpoases_timing.append(timing)
     qpoases_iter.append(niter)
+
+    # Solve loop with gurobi
+    timing, niter = solve_loop(qp_matrices_sparse, 'gurobi')
+    gurobi_timing.append(timing)
+    gurobi_iter.append(niter)
 
     # Generate QP dense matrices
     # qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
@@ -460,18 +489,19 @@ fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
-# qpoases2_avg = np.array([x.avg for x in qpoases2_timing])
 cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 fiordos_avg = fiordos_results['avg_vec'].flatten()
+gurobi_avg = np.array([x.avg for x in gurobi_timing])
+
 
 plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color='C1', label='qpOASES')
-# plt.semilogy(n_vec, qpoases2_avg, color='C2', label='qpOASES2')
 plt.semilogy(n_vec[:min(len(n_vec), 4)], cvxgen_avg[:min(len(n_vec), 6)],
              color='C3', label='CVXGEN')
 plt.semilogy(n_vec, fiordos_avg[:len(n_vec)], color='C4', label='FiOrdOs')
+plt.semilogy(n_vec, gurobi_avg, color='C5', label='GUROBI')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
