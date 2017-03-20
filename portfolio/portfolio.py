@@ -202,7 +202,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
         m = osqp.OSQP()
         m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp,
                 eps_abs=1e-03, eps_rel=1e-03,
-                rho=0.05, alpha=1.5, sigma=0.001, verbose=False)
+                rho=0.1, alpha=1.6, sigma=0.001, verbose=False, early_terminate_interval=25)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -224,6 +224,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
             # Check if status correct
             if status != 1:
+                import ipdb; ipdb.set_trace()
                 raise ValueError('OSQP did not solve the problem!')
 
             # DEBUG
@@ -390,7 +391,7 @@ gammas = np.logspace(-2, 2, n_gamma)
 
 
 # Assets
-n_vec = np.array([20, 30, 50, 80, 100, 120, 150, 200, 250, 300])
+n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300])
 # n_vec = np.array([20, 30, 50])
 
 # Factors
@@ -401,9 +402,9 @@ k_vec = (n_vec / 10).astype(int)
 osqp_timing = []
 osqp_iter = []
 qpoases_timing = []
-qpoases2_timing = []
+# qpoases2_timing = []
 qpoases_iter = []
-qpoases2_iter = []
+# qpoases2_iter = []
 
 
 for i in range(len(n_vec)):
@@ -425,13 +426,13 @@ for i in range(len(n_vec)):
     qpoases_iter.append(niter)
 
     # Generate QP dense matrices
-    qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
-                                        gammas, 'dense')
-
-    # Solving loop with qpoases
-    timing, niter = solve_loop(qp_matrices_dense, 'qpoases2')
-    qpoases2_timing.append(timing)
-    qpoases2_iter.append(niter)
+    # qp_matrices_dense = gen_qp_matrices(k_vec[i], n_vec[i],
+    #                                     gammas, 'dense')
+    #
+    # # Solving loop with qpoases
+    # timing, niter = solve_loop(qp_matrices_dense, 'qpoases2')
+    # qpoases2_timing.append(timing)
+    # qpoases2_iter.append(niter)
 
 
 '''
@@ -458,7 +459,7 @@ fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
 # Plot timings
 osqp_avg = np.array([x.avg for x in osqp_timing])
 qpoases_avg = np.array([x.avg for x in qpoases_timing])
-qpoases2_avg = np.array([x.avg for x in qpoases2_timing])
+# qpoases2_avg = np.array([x.avg for x in qpoases2_timing])
 cvxgen_avg = cvxgen_results['avg_vec'].flatten()
 fiordos_avg = fiordos_results['avg_vec'].flatten()
 
@@ -466,10 +467,10 @@ plt.figure()
 ax = plt.gca()
 plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
 plt.semilogy(n_vec, qpoases_avg, color='C1', label='qpOASES')
-plt.semilogy(n_vec, qpoases2_avg, color='C2', label='qpOASES2')
-plt.semilogy(n_vec[:min(len(n_vec), 6)], cvxgen_avg[:min(len(n_vec), 6)],
+# plt.semilogy(n_vec, qpoases2_avg, color='C2', label='qpOASES2')
+plt.semilogy(n_vec[:min(len(n_vec), 4)], cvxgen_avg[:min(len(n_vec), 6)],
              color='C3', label='CVXGEN')
-plt.semilogy(n_vec, fiordos_avg[:10], color='C4', label='FiOrdOs')
+plt.semilogy(n_vec, fiordos_avg[:len(n_vec)], color='C4', label='FiOrdOs')
 plt.legend()
 plt.grid()
 ax.set_xlabel(r'Number of assets $n$')
