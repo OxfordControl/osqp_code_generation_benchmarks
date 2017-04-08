@@ -163,7 +163,7 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
         # Pass the data to OSQP
         m = osqp.OSQP()
-        m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp,
+        m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp, auto_rho=False,
                 eps_abs=1e-03, eps_rel=1e-03, verbose=False)
 
         # Get extension name
@@ -333,8 +333,7 @@ for i in range(len(n_vec)):
 
 
     # Generate QP
-    qp_matrices = gen_qp_matrices(k_vec[i], n_vec[i],
-                                         gammas, 'sparse')
+    qp_matrices = gen_qp_matrices(k_vec[i], n_vec[i], gammas)
 
     # Solve loop with emosqp
     timing, niter = solve_loop(qp_matrices, 'emosqp')
@@ -355,22 +354,18 @@ for i in range(len(n_vec)):
 '''
 Get CVXGEN timings
 '''
-cur_dir = os.getcwd()
-os.chdir('cvxgen')
+cvxgen_dir = os.path.join(os.getcwd(), 'cvxgen')
 call(["matlab", "-nodesktop", "-nosplash",
-      "-r", "run run_all; exit;"])
-os.chdir(cur_dir)
+      "-r", "cd %s; run run_all; exit;" % cvxgen_dir])
 cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
 
 
 '''
 Get FiOrdOs timings
 '''
-cur_dir = os.getcwd()
-os.chdir('fiordos')
+fiordos_dir = os.path.join(os.getcwd(), 'fiordos')
 call(["matlab", "-nodesktop", "-nosplash",
-      "-r", "run run_all; exit;"])
-os.chdir(cur_dir)
+      "-r", "cd %s; run run_all; exit;" % fiordos_dir])
 fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
 
 # Plot timings
