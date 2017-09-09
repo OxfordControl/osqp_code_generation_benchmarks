@@ -255,7 +255,7 @@ for i in range(len(n_vec)):
              ' cmake --build .',
              shell=True)
         example_path = os.path.join('code', 'build', 'out', example_fullname)
-        example_size = os.path.getsize(example_path) / 1024.
+        example_size = int(round(os.path.getsize(example_path) / 1024.))
 
         # Problem statistics
         N = qp_matrices.P.nnz + qp_matrices.A.nnz

@@ -264,10 +264,10 @@ k_vec = (n_vec / 10).astype(int)
 
 # Setup if solve with gurobi/qpoases or not
 solve_osqp = True
-solve_gurobi = True
-solve_qpoases = True
-solve_cvxgen = True
-solve_fiordos = True
+solve_gurobi = False
+solve_qpoases = False
+solve_cvxgen = False
+solve_fiordos = False
 
 # Define statistics for osqp, gurobi and qpoases
 if solve_osqp:
@@ -314,7 +314,7 @@ for i in range(len(n_vec)):
              ' cmake --build .',
              shell=True)
         example_path = os.path.join('code', 'build', 'out', example_fullname)
-        example_size = os.path.getsize(example_path) / 1024.
+        example_size = int(round(os.path.getsize(example_path) / 1024.))
 
         # Problem statistics
         N = qp_matrices.P.nnz + qp_matrices.A.nnz

@@ -195,18 +195,13 @@ out/
 
 # Data Files
 # -------------------------------------------------------------------
-small/code
 portfolio/code
 portfolio/*.txt
 portfolio/cvxgen/**/cvxgen*
 portfolio/cvxgen/**/*csolve*
 portfolio/cvxgen/**/*cvxsolve*
-portfolio/cvxgen/**/datafilen*.mat
+portfolio/cvxgen/**/*.mat
 portfolio/fiordos/**/code
-portfolio/fiordos/**/datafilen*.mat
-mpc_pendulum/code
-mpc_pendulum/fiordos/data
-mpc_pendulum/fiordos/fiordos_code
-mpc_pendulum/fiordos/old_files
+portfolio/fiordos/**/*.mat
 lasso/code
 lasso/fiordos/**/code
