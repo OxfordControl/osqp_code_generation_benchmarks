@@ -5,7 +5,7 @@ function [ time_vec ] = portfolion80()
 
 % Generate code with
 if ~exist(strcat('csolve.', mexext), 'file')
-    cvxgen(926748553216)
+    cvxgen(307372040192)
 end
 
 % Load data
@@ -32,7 +32,7 @@ for i = 1:n_prob
     params.gamma = data.gammas(i);
 
     tic
-    [vars, status] = csolve(params, settings);
+    [~, status] = csolve(params, settings);
     time_vec(i) = toc;
 
     if status.converged ~= 1

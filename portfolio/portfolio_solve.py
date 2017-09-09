@@ -4,35 +4,17 @@ import numpy as np
 import scipy.sparse as spa
 from builtins import range
 import os
-
-# Import subprocess to run matlab script
-from subprocess import call
+import pandas as pd
 
 # Import scipy io to write/read mat file
 import scipy.io as io
 
+# Import subprocess to run matlab script
+from subprocess import call
+from platform import system
+
 # For importing python modules from string
 import importlib
-
-# Import osqp
-import osqp
-
-# Import qpoases
-import qpoases as qpoases
-
-# Plotting
-import matplotlib.pylab as plt
-plt.rc('axes', labelsize=20)    # fontsize of the x and y labels
-plt.rc('xtick', labelsize=15)   # fontsize of the tick labels
-plt.rc('ytick', labelsize=15)   # fontsize of the tick labels
-plt.rc('legend', fontsize=15)   # legend fontsize
-plt.rc('text', usetex=True)     # use latex
-plt.rc('font', family='serif')
-
-colors = { 'b': '#1f77b4',
-           'g': '#2ca02c',
-           'o': '#ff7f0e',
-           'r': '#d62728'}
 
 
 class QPmatrices(object):
@@ -54,18 +36,6 @@ class QPmatrices(object):
         self.ux = ux
 
 
-class Statistics(object):
-    """
-    Solve statistics
-    """
-    def __init__(self, x):
-        self.x = x
-        self.avg = np.mean(x)
-        self.median = np.median(x)
-        self.max = np.max(x)
-        self.min = np.min(x)
-
-
 def gen_qp_matrices(k, n, gammas):
     """
     Generate QP matrices for portfolio optimization problem
@@ -81,10 +51,6 @@ def gen_qp_matrices(k, n, gammas):
     F = spa.random(n, k, density=dens_lvl, format='csc')
     D = spa.diags(np.random.rand(n) * np.sqrt(k), format='csc')
     mu = np.random.randn(n)
-
-    # Write mu vector in the file (for pure_c)
-    # np.savetxt('portfolio_data.txt', mu)
-    # gamma = 1
 
     # Construct the problem
     #       minimize	x' D x + y' I y - (1/gamma) * mu' x
@@ -112,14 +78,14 @@ def gen_qp_matrices(k, n, gammas):
 
     # Save matrices for CVXGEN (n<= 120)
     if n <= 120:
-        io.savemat('cvxgen/n%d/datafilen%d.mat' % (n, n),
+        io.savemat(os.path.join('cvxgen', 'n%d' % n, 'datafilen%d.mat' % n),
                    {'gammas': gammas,
                     'F': F,
                     'D': D,
                     'mu': mu})
 
     # Save matrices for FiOrdOs
-    io.savemat('fiordos/n%d/datafilen%d.mat' % (n, n),
+    io.savemat(os.path.join('fiordos', 'n%d' % n, 'datafilen%d.mat' % n),
                {'gammas': gammas,
                 'F': F,
                 'D': D,
@@ -143,28 +109,25 @@ def solve_loop(qp_matrices, solver='emosqp'):
     # Get number of problems to solve
     n_prob = qp.q_vecs.shape[1]
 
-    # Initialize time vector
-    time = np.zeros(n_prob)
-
-    # Initialize number of iterations vector
-    niter = np.zeros(n_prob)
-
     # number of assets and factors
     n = qp.n
     k = qp.k
 
+    # Results list
+    results = []
+
     if solver == 'emosqp':
         # Construct qp matrices
-        Aosqp = spa.vstack((qp.A,
-                            spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
-                                       ))).tocsc()
+        Aosqp = spa.vstack([qp.A,
+                            spa.hstack([spa.eye(n), spa.csc_matrix((n, k))])
+                            ]).tocsc()
         losqp = np.append(qp.l, qp.lx)
         uosqp = np.append(qp.u, qp.ux)
 
         # Pass the data to OSQP
         m = osqp.OSQP()
-        m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp, auto_rho=False,
-                eps_abs=1e-03, eps_rel=1e-03, verbose=False)
+        m.setup(qp.P, qp.q_vecs[:, 0], Aosqp, losqp, uosqp,
+                rho=10, verbose=False)
 
         # Get extension name
         module_name = 'emosqpn%s' % str(qp.n)
@@ -182,19 +145,19 @@ def solve_loop(qp_matrices, solver='emosqp'):
             emosqp.update_lin_cost(q)
 
             # Solve
-            x, y, status, niter[i], time[i] = emosqp.solve()
+            x, y, status, niter, time = emosqp.solve()
 
             # Check if status correct
             if status != 1:
                 import ipdb; ipdb.set_trace()
                 raise ValueError('OSQP did not solve the problem!')
 
-            # DEBUG
-            # solve with gurobi
-            # import mathprogbasepy as mpbpy
-            # prob = mpbpy.QuadprogProblem(qp.P, q, Aosqp, losqp, uosqp)
-            # res = prob.solve(solver=mpbpy.GUROBI)
-            # import ipdb; ipdb.set_trace()
+            # Solution statistics
+            solution_dict = {'solver': [solver],
+                             'runtime': [time],
+                             'iter': [niter],
+                             'n': [qp.n]}
+            results.append(pd.DataFrame(solution_dict))
 
     elif solver == 'qpoases':
         '''
@@ -245,33 +208,15 @@ def solve_loop(qp_matrices, solver='emosqp'):
                                                  nWSR,
                                                  qpoases_cpu_time)
 
-            # # DEBUG Solve with gurobi
-            # qpoases solution
-            # sol_qpoases = np.zeros(n + k)
-            # qpoases_m.getPrimalSolution(sol_qpoases)
-            # import mathprogbasepy as mpbpy
-            # Agrb = spa.vstack((qp.A,
-            #                     spa.hstack((spa.eye(n), spa.csc_matrix((n, k)))
-            #                                ))).tocsc()
-            # lgrb = np.append(qp.l, qp.lx)
-            # ugrb = np.append(qp.u, qp.ux)
-            # prob = mpbpy.QuadprogProblem(spa.csc_matrix(qp.P), q,
-            #                              Agrb, lgrb, ugrb)
-            # res = prob.solve(solver=mpbpy.GUROBI, verbose=True)
-            # print("Norm difference x qpoases - GUROBI = %.4f" %
-            #       np.linalg.norm(sol_qpoases - res.x))
-            # print("Norm difference objval qpoases - GUROBI = %.4f" %
-            #       abs(qpoases_m.getObjVal() - res.obj_val))
-            # import ipdb; ipdb.set_trace()
-
             if res_qpoases != 0:
                 raise ValueError('qpoases did not solve the problem!')
 
-            # Save time
-            time[i] = qpoases_cpu_time[0]
-
-            # Save number of iterations
-            niter[i] = nWSR[0]
+            # Solution statistics
+            solution_dict = {'solver': [solver],
+                             'runtime': [qpoases_cpu_time[0]],
+                             'iter': [nWSR[0]],
+                             'n': [qp.n]}
+            results.append(pd.DataFrame(solution_dict))
 
     elif solver == 'gurobi':
 
@@ -288,22 +233,20 @@ def solve_loop(qp_matrices, solver='emosqp'):
             q = np.ascontiguousarray(qp.q_vecs[:, i])
 
             # solve with gurobi
-            import mathprogbasepy as mpbpy
             prob = mpbpy.QuadprogProblem(qp.P, q, Agurobi, lgurobi, ugurobi)
             res = prob.solve(solver=mpbpy.GUROBI, verbose=False)
 
-            # Save time
-            time[i] = res.cputime
-
-            # Save number of iterations
-            niter[i] = res.total_iter
+            # Solution statistics
+            solution_dict = {'solver': [solver],
+                             'runtime': [res.cputime],
+                             'iter': [res.total_iter],
+                             'n': [qp.n]}
+            results.append(pd.DataFrame(solution_dict))
 
     else:
         raise ValueError('Solver not understood')
 
-
-    # Return statistics
-    return Statistics(time), Statistics(niter)
+    return pd.concat(results)
 
 
 '''
@@ -311,8 +254,7 @@ Solve problems
 '''
 # Generate gamma parameters and cost vectors
 n_gamma = 11
-gammas = np.logspace(-2, 2, n_gamma)
-
+gammas = np.logspace(2, -2, n_gamma)
 
 # Assets
 n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300, 400, 500])
@@ -320,74 +262,104 @@ n_vec = np.array([50, 80, 100, 120, 150, 200, 250, 300, 400, 500])
 # Factors
 k_vec = (n_vec / 10).astype(int)
 
+# Setup if solve with gurobi/qpoases or not
+solve_osqp = True
+solve_gurobi = True
+solve_qpoases = True
+solve_cvxgen = True
+solve_fiordos = True
 
-# Define statistics for osqp and qpoases
-osqp_timing = []
-osqp_iter = []
-qpoases_timing = []
-qpoases_iter = []
-gurobi_iter = []
-gurobi_timing = []
+# Define statistics for osqp, gurobi and qpoases
+if solve_osqp:
+    import osqp
+    osqp_stats = []
+    problem_stats = []
+if solve_gurobi:
+    import mathprogbasepy as mpbpy
+    gurobi_stats = []
+if solve_qpoases:
+    import qpoases
+    qpoases_stats = []
 
+# Size of the exe file generated by OSQP
+if solve_osqp:
+    if system() == 'Windows':
+        cmdsep = '&'
+        makefile = '"MinGW Makefiles"'
+        example_fullname = 'example.exe'
+    else:
+        cmdsep = ';'
+        makefile = '"Unix Makefiles"'
+        example_fullname = 'example'
+
+
+'''
+Solve problems
+'''
 for i in range(len(n_vec)):
 
-
-    # Generate QP
+    # Generate QP sparse matrices
     qp_matrices = gen_qp_matrices(k_vec[i], n_vec[i], gammas)
 
-    # Solve loop with emosqp
-    timing, niter = solve_loop(qp_matrices, 'emosqp')
-    osqp_timing.append(timing)
-    osqp_iter.append(niter)
+    if solve_osqp:
+        # Solving loop with emosqp
+        stats = solve_loop(qp_matrices, 'emosqp')
+        osqp_stats.append(stats)
 
-    # Solving loop with qpoases
-    timing, niter = solve_loop(qp_matrices, 'qpoases')
-    qpoases_timing.append(timing)
-    qpoases_iter.append(niter)
+        # Get size of the generated exe file in KB
+        call('cd code %s ' % (cmdsep) +
+             'mkdir build %s ' % (cmdsep) +
+             'cd build %s ' % (cmdsep) +
+             'cmake -G %s .. %s ' % (makefile, cmdsep) +
+             ' cmake --build .',
+             shell=True)
+        example_path = os.path.join('code', 'build', 'out', example_fullname)
+        example_size = os.path.getsize(example_path) / 1024.
 
-    # Solve loop with gurobi
-    timing, niter = solve_loop(qp_matrices, 'gurobi')
-    gurobi_timing.append(timing)
-    gurobi_iter.append(niter)
+        # Problem statistics
+        N = qp_matrices.P.nnz + qp_matrices.A.nnz
+        problem_dict = {'n': [qp_matrices.n],
+                        'k': [qp_matrices.k],
+                        'N': [N],
+                        'filesize': example_size}
+        problem_stats.append(pd.DataFrame(problem_dict))
 
+    if solve_qpoases:
+        # Solving loop with qpoases
+        stats = solve_loop(qp_matrices, 'qpoases')
+        qpoases_stats.append(stats)
+
+    if solve_gurobi:
+        # Solve loop with gurobi
+        stats = solve_loop(qp_matrices, 'gurobi')
+        gurobi_stats.append(stats)
+
+if solve_cvxgen:
+    call('matlab -nodesktop -nodisplay -nosplash -r ' +
+         '"cd cvxgen; run run_all; exit;"')
+
+if solve_fiordos:
+    call('matlab -nodesktop -nodisplay -nosplash -r ' +
+         '"cd fiordos; run run_all; exit;"')
 
 '''
-Get CVXGEN timings
+Store results in CSV files
 '''
-cvxgen_dir = os.path.join(os.getcwd(), 'cvxgen')
-call(["matlab", "-nodesktop", "-nosplash",
-      "-r", "cd %s; run run_all; exit;" % cvxgen_dir])
-cvxgen_results = io.loadmat('cvxgen/cvxgen_results.mat')
+if solve_osqp:
+    # Combine OSQP stats and store them in a CSV file
+    df = pd.concat(osqp_stats)
+    df.to_csv('osqp_stats.csv', index=False)
 
+    # Combine problem stats and store them in a CSV file
+    df = pd.concat(problem_stats)
+    df.to_csv('problem_stats.csv', index=False)
 
-'''
-Get FiOrdOs timings
-'''
-fiordos_dir = os.path.join(os.getcwd(), 'fiordos')
-call(["matlab", "-nodesktop", "-nosplash",
-      "-r", "cd %s; run run_all; exit;" % fiordos_dir])
-fiordos_results = io.loadmat('fiordos/fiordos_results.mat')
+if solve_gurobi:
+    # Combine GUROBI stats and store them in a CSV file
+    df = pd.concat(gurobi_stats)
+    df.to_csv('gurobi_stats.csv', index=False)
 
-# Plot timings
-osqp_avg = np.array([x.avg for x in osqp_timing])
-qpoases_avg = np.array([x.avg for x in qpoases_timing])
-cvxgen_avg = cvxgen_results['avg_vec'].flatten()
-fiordos_avg = fiordos_results['avg_vec'].flatten()
-gurobi_avg = np.array([x.avg for x in gurobi_timing])
-
-
-plt.figure()
-ax = plt.gca()
-plt.semilogy(n_vec, osqp_avg, color='C0', label='OSQP')
-plt.semilogy(n_vec, qpoases_avg, color='C1', label='qpOASES')
-plt.semilogy(n_vec[:min(len(n_vec), 4)], cvxgen_avg[:min(len(n_vec), 6)],
-             color='C3', label='CVXGEN')
-plt.semilogy(n_vec, fiordos_avg[:len(n_vec)], color='C4', label='FiOrdOs')
-plt.semilogy(n_vec, gurobi_avg, color='C5', label='GUROBI')
-plt.legend()
-plt.grid()
-ax.set_xlabel(r'Number of assets $n$')
-ax.set_ylabel(r'Time [s]')
-plt.tight_layout()
-plt.show(block=False)
-plt.savefig('results.pdf')
+if solve_qpoases:
+    # Combine QPOASES stats and store them in a CSV file
+    df = pd.concat(qpoases_stats)
+    df.to_csv('qpoases_stats.csv', index=False)

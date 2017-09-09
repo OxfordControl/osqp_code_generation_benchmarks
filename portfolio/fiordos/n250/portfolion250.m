@@ -1,5 +1,5 @@
-function [ time_vec ] = portfolion200()
-%PORTFOLION100CVXGEN Run portfolio example with n = 200, k = 20
+function [ time_vec ] = portfolion250()
+%PORTFOLION100CVXGEN Run portfolio example with n = 250, k = 25
 % with CVXGEN
 
 

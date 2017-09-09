@@ -1,10 +1,10 @@
-function [ time_vec ] = portfolion100cvxgen()
+function [ time_vec ] = portfolion100()
 %PORTFOLION100CVXGEN Run portfolio example with n = 100, m = 10
 % with CVXGEN
 
 if ~exist(strcat('csolve.', mexext), 'file')
     % Generate code with
-    cvxgen(526211878912)
+    cvxgen(307372040192)
 end
 
 % Load data
@@ -31,7 +31,7 @@ for i = 1:n_prob
     params.gamma = data.gammas(i);
 
     tic
-    [vars, status] = csolve(params, settings);
+    [~, status] = csolve(params, settings);
     time_vec(i) = toc;
 
     if status.converged ~= 1

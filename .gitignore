@@ -198,10 +198,12 @@ out/
 small/code
 portfolio/code
 portfolio/*.txt
-portfolio/cvxgen/**/cvxgen
+portfolio/cvxgen/**/cvxgen*
 portfolio/cvxgen/**/*csolve*
 portfolio/cvxgen/**/*cvxsolve*
+portfolio/cvxgen/**/datafilen*.mat
 portfolio/fiordos/**/code
+portfolio/fiordos/**/datafilen*.mat
 mpc_pendulum/code
 mpc_pendulum/fiordos/data
 mpc_pendulum/fiordos/fiordos_code
