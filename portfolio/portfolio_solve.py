@@ -149,7 +149,8 @@ def solve_loop(qp_matrices, solver='emosqp'):
 
             # Check if status correct
             if status != 1:
-                import ipdb; ipdb.set_trace()
+                import ipdb
+                ipdb.set_trace()
                 raise ValueError('OSQP did not solve the problem!')
 
             # Solution statistics
@@ -264,10 +265,10 @@ k_vec = (n_vec / 10).astype(int)
 
 # Setup if solve with gurobi/qpoases or not
 solve_osqp = True
-solve_gurobi = False
-solve_qpoases = False
-solve_cvxgen = False
-solve_fiordos = False
+solve_gurobi = True
+solve_qpoases = True
+solve_cvxgen = True
+solve_fiordos = True
 
 # Define statistics for osqp, gurobi and qpoases
 if solve_osqp:
@@ -335,12 +336,14 @@ for i in range(len(n_vec)):
         gurobi_stats.append(stats)
 
 if solve_cvxgen:
-    call('matlab -nodesktop -nodisplay -nosplash -r ' +
-         '"cd cvxgen; run run_all; exit;"')
+    cur_dir = os.getcwd()
+    call(["matlab", "-nodesktop", "-nodisplay", "-nosplash", "-r"] +
+         ["cd %s; run run_all; exit;" % os.path.join(cur_dir, "cvxgen")])
 
 if solve_fiordos:
-    call('matlab -nodesktop -nodisplay -nosplash -r ' +
-         '"cd fiordos; run run_all; exit;"')
+    cur_dir = os.getcwd()
+    call(["matlab", "-nodesktop", "-nodisplay", "-nosplash", "-r"] +
+         ["cd %s; run run_all; exit;" % os.path.join(cur_dir, "fiordos")])
 
 '''
 Store results in CSV files

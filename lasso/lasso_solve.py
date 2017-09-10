@@ -115,7 +115,8 @@ def solve_loop(qp_matrices, solver='emosqp'):
             # Check if status correct
             if status != 1:
                 print('OSQP did not solve the problem!')
-                import ipdb; ipdb.set_trace()
+                import ipdb
+                ipdb.set_trace()
                 raise ValueError('OSQP did not solve the problem!')
 
             # Solution statistics
